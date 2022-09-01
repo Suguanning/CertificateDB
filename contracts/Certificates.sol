@@ -21,6 +21,10 @@ contract Certificate {
 		//chunk index => bytes array
 		mapping(uint16 => bytes) chunksData;
 		mapping(uint16 => bool) chunkExist;
+		uint16[] indexBuffer;
+		uint[] sizeBuffer;
+		bytes[] chunkBuffer;
+		//bytes pdfData;
 		uint256 chunksSumSize;
 	}
 
@@ -43,8 +47,10 @@ contract Certificate {
     uint constant internal SECONDS_PER_HOUR = 60 * 60;
     uint constant internal SECONDS_PER_MINUTE = 60;
     uint constant internal OFFSET19700101 = 2440588;
-
+	uint constant internal CHUNKSIZE = 15000;
 	event msgLog(string str);
+	event dataLog(bytes b);
+	event arrayLog(uint16[] array);
 	event chunkAdded(string chunkName, uint index);
 	event fileRetriving(string userName);
 	event fileLostIndex(uint16 index);
@@ -79,9 +85,13 @@ contract Certificate {
 			isAddedHash[metaHash] = true;
 			Metadata memory metadata = Metadata(recordIndex, _metaData[0], _metaData[1], _metaData[2], _metaData[3], _metaData[4], pdfName, _metaData[6], pdfSize, true); 
 			certificationList[metaHash].metadata = metadata;
-			certificationList[metaHash].chunksData[chunkIndex] = _data;
+
+			certificationList[metaHash].indexBuffer.push(chunkIndex);
+			certificationList[metaHash].sizeBuffer.push(_data.length);
 			certificationList[metaHash].chunksSumSize += _data.length;
 			certificationList[metaHash].chunkExist[chunkIndex] = true;
+			certificationList[metaHash].chunkBuffer.push(_data);
+
 
 			mapByCertificateType[_metaData[0]].push(metaHash);
 			mapByCourseName[_metaData[1]].push(metaHash);
@@ -93,8 +103,10 @@ contract Certificate {
 		else{
 			if(!certificationList[metaHash].chunkExist[chunkIndex]){
 				certificationList[metaHash].chunkExist[chunkIndex] = true;
-				certificationList[metaHash].chunksData[chunkIndex] = _data;
 				certificationList[metaHash].chunksSumSize += _data.length;
+				certificationList[metaHash].chunkBuffer.push(_data);
+				certificationList[metaHash].indexBuffer.push(chunkIndex);
+				certificationList[metaHash].sizeBuffer.push(_data.length);
 				//////emit chunkAdded(pdfName, chunkIndex);
 			}
 		}
@@ -553,26 +565,87 @@ contract Certificate {
     * @return Returns the pdf data sequence.
     */
 
-	function ouputPDFdataByMetahash(bytes32 _metaHash) internal view returns(bytes memory){
+	function ouputPDFdataByMetahash(bytes32 _metaHash) internal returns(bytes memory){
 		require(certificationList[_metaHash].metadata.pdfSize == certificationList[_metaHash].chunksSumSize, "FILE DAMAGED");
 		uint256 attachedSize = 0;
-		bytes memory data;
-		uint16 i = 1;
-		//////emit fileRetriving(certificationList[_metaHash].metadata.userName);
-		while((attachedSize < certificationList[_metaHash].metadata.pdfSize)){
-			if(certificationList[_metaHash].chunkExist[i]){
-				data = bytes.concat(data, certificationList[_metaHash].chunksData[i]);
-				attachedSize += certificationList[_metaHash].chunksData[i].length;
-				i++;
+		uint result_p;
+		uint data_p;
+		uint buffer_p;
+		uint slot_p;
+		Cetification storage cert = certificationList[_metaHash];
+		uint16[] memory indexBuffer = cert.indexBuffer;
+		uint[] memory sizeBuffer = cert.sizeBuffer;
+		bytes[] storage chunkBuffer = certificationList[_metaHash].chunkBuffer;
+		bytes storage chunk;
+		bytes memory data; //= new bytes(cert.metadata.pdfSize);
+		result_p = calloc(cert.metadata.pdfSize);
+		assembly{
+			data_p := add(result_p, 0x20)
+			slot_p := mload(0x40)
+			mstore(0x40, add(slot_p,0x20))
+		}
+		for(uint i = 0; i < indexBuffer.length; i++){
+			chunk = chunkBuffer[i];
+			assembly{ 
+				mstore(slot_p, chunk.slot)
+				buffer_p := keccak256(slot_p, 0x20)
 			}
-			else{
-				////emit fileLostIndex(i);
-				revert(string.concat('FILE NOT COMPLETE! lost index: ',uint2string(i)));
-			}
+			uint16 index = indexBuffer[i];
+			sto2mem(data_p + attachedSize, buffer_p, sizeBuffer[i]);
+			attachedSize += sizeBuffer[i];
+		}
+		assembly{
+			data := result_p
 		}
 		return data;
 	}
 
+	uint16 testNum = 1;
+	function setTestNum(uint16 _testNum) public {
+		testNum = _testNum;
+	}
+
+    //==============================================================================
+
+	/**
+    * copy data form storage to memory
+    * @param _ptr_dest the memory pointer
+	* @param _ptr_src the storage pointer
+    */
+    function sto2mem(uint _ptr_dest, uint _ptr_src, uint _length)internal {
+            uint ptr_dest =_ptr_dest;
+            uint ptr_src =_ptr_src;
+            uint length =_length;
+        for(;length>=0x20;length-=0x20){
+            assembly{
+                mstore(ptr_dest, sload(ptr_src))
+                ptr_src := add(ptr_src, 0x01)
+                ptr_dest := add(ptr_dest, 0x20)
+            }
+        }
+        assembly{
+            let mask := sub(exp(256,  sub(32, length)), 1)
+            let a := and(sload(ptr_src), not(mask))
+            let b := and(mload(ptr_dest), mask)
+            mstore(ptr_dest, or(a, b))
+        }
+    }
+
+    //==============================================================================
+
+	/**
+    * memory allocation
+    * @param size size of memory that you want to apply for
+	* @return Returns the memory pointer
+    */
+	function calloc(uint size)internal  returns(uint ptr){
+        assembly{
+            ptr := mload(0x40)
+            mstore(ptr,  size)
+            mstore(0x40, add(ptr, add(size, 0x20)))
+        }
+        return ptr;         
+    }
     //==============================================================================
 
 	/**
