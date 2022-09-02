@@ -38,7 +38,7 @@ async function insertCertification(instance, path, isWhole,  num){
 	let metaData = fs.readFileSync(metaPath);
 	metaData = JSON.parse(metaData);
 	if(isWhole){
-		for(var i = 0; i < metaData.length; i++){
+		for(var i = metaData.length-1; i != -1; i--){
 			let data = fs.readFileSync(dataPath + metaData[i].chunk_file_name)
 			let meta = metaData[i];
 			let metaArray = Object.values(meta);

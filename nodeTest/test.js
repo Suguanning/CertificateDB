@@ -13,7 +13,7 @@ var data = fs.readFileSync("../build/contracts/Certificate.json", "utf-8");
 //完整数据 0x1865A14DFd48EDb0b5f550C8009a3bBc6d424DDF
 //不完整数据 0xD7aEc88077Db73Ca019dc068420dd8bDeB86C364
 
-var contract = new web3.eth.Contract(JSON.parse(data).abi,'0x5a82c7475a7d65aca6864ee9ebf7258067d9d63e');
+var contract = new web3.eth.Contract(JSON.parse(data).abi,'0xafd4936fa8748d2fb51a6b0c86436698e80af423');
 
 
 // contract.methods.store(200).send({from:'0x51BF497D8B47C5754220be9256F0Cb9E2Cd688B8'}).then(console.log);

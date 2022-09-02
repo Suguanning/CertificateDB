@@ -103,6 +103,59 @@ contract Test{
             mstore(ptr_dest, or(a, b))
         }
     }
+    //==============================================================================
+
+	/**
+    * copy data form memory to storage
+    * @param _ptr_dest the storage pointer
+	* @param _ptr_src the memory pointer
+	* @param _offset the storage pointer offset (byte)
+    */
+    function mem2sto(uint _ptr_dest, uint _ptr_src, uint _offset, uint _length)internal {
+           
+		uint ptr_src =_ptr_src;
+		uint length =_length;
+		uint offset = _offset;
+		uint ptr_dest =_ptr_dest;
+
+        if(offset != 0){
+            uint slot_offset = offset/0x20;
+		    uint bytes_offset = offset % 0x20;
+		    uint bit_offset = bytes_offset * 8;
+            ptr_dest =_ptr_dest + slot_offset;
+            assembly{
+                let stoTemp := sload(ptr_dest)
+                let memTemp := mload(_ptr_src)
+                memTemp := shr(bit_offset, memTemp)
+                stoTemp := and(stoTemp, not(shr(bit_offset,not(0))))
+                stoTemp := or(stoTemp, memTemp)
+                sstore(ptr_dest, stoTemp)
+            }
+            if(length >= 32 - bytes_offset){
+                length -= (32 - bytes_offset);
+            }
+            else{
+                length = 0;
+                return;
+            }
+            ptr_src += (32 - bytes_offset); 
+            ptr_dest += 1;
+        }
+
+        for(;length>=0x20;length-=0x20){
+            assembly{
+                sstore(ptr_dest, mload(ptr_src))
+                ptr_src := add(ptr_src, 0x20)
+                ptr_dest := add(ptr_dest, 0x01)
+            }
+        }
+        assembly{
+            let mask := sub(exp(256,  sub(32, length)), 1)
+            let a := and(mload(ptr_src), not(mask))
+            let b := and(sload(ptr_dest), mask)
+            sstore(ptr_dest, or(a, b))
+        }
+    }
     string public sa = '13';
     string public sb = '123123';
     string public sd = 'Sure, in that case we need to read a short array (i.e., up to 31 bytes of data and ';
@@ -110,7 +163,7 @@ contract Test{
     function test() public{
         //bytes memory temp = [0x01,2,3];
         //emit msgLog('leng: ',temp.length);
-        string memory str;
+        string memory str = 'ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJ';
         //string memory temp = sb;
         uint ptr_a;
         uint ptr_b;
@@ -126,14 +179,12 @@ contract Test{
             mstore(0x40,add(ptr, 0x20))
 
             ptr_a := keccak256(ptr,0x20)
-            ptr_b := add(temp,0x20)
-
-            mstore(temp,256)
+            ptr_b := add(str,0x20)
         }
-        sto2mem(ptr_b,ptr_a,bytes(sd).length);
+        mem2sto(ptr_a, ptr_b,33,bytes(str).length);
+        //sto2mem(ptr_b,ptr_a,bytes(sd).length);
         //sto2mem(ptr_b+0x20,ptr_a+1,32);
-        emit msgLog(temp,data);
-        emit msgLog('length:',2*bytes(sd).length+1);
+        emit msgLog(sd ,bytes(sd).length);
     }
 
     bytes[] arrayList;

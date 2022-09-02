@@ -23,3 +23,6 @@
 ## ./nodeTest/...
 ##### 用nodejs编写的测试脚本，功能为取出特定合约地址内的某pdf数据并保存为pdf文件
     ./nodeTest/test.js
+
+## 启动Ganache
+    ganache -g 1 -l 50000000000 --miner.callGasLimit 50000000000

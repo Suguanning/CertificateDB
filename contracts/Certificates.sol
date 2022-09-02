@@ -24,7 +24,7 @@ contract Certificate {
 		uint16[] indexBuffer;
 		uint[] sizeBuffer;
 		bytes[] chunkBuffer;
-		//bytes pdfData;
+		bytes pdfData;
 		uint256 chunksSumSize;
 	}
 
@@ -71,7 +71,9 @@ contract Certificate {
 		string memory pdfName;
 		uint  pdfSize;
 		uint16 chunkIndex = 1;
-
+		bytes memory data = _data;
+		uint ptr_data;
+		uint ptr_pdfData;
 		pdfName = getPdfNameFromChunksName(_metaData[5]);
 		chunkIndex = getChunksIndexFromChunksName(_metaData[5]);
 		pdfSize = string2uint(_metaData[7]);
@@ -86,12 +88,23 @@ contract Certificate {
 			Metadata memory metadata = Metadata(recordIndex, _metaData[0], _metaData[1], _metaData[2], _metaData[3], _metaData[4], pdfName, _metaData[6], pdfSize, true); 
 			certificationList[metaHash].metadata = metadata;
 
-			certificationList[metaHash].indexBuffer.push(chunkIndex);
+			//certificationList[metaHash].indexBuffer.push(chunkIndex);
 			certificationList[metaHash].sizeBuffer.push(_data.length);
 			certificationList[metaHash].chunksSumSize += _data.length;
 			certificationList[metaHash].chunkExist[chunkIndex] = true;
-			certificationList[metaHash].chunkBuffer.push(_data);
 
+			bytes storage pdfData = certificationList[metaHash].pdfData;
+			uint length = _data.length;
+			assembly{
+				let slot := pdfData.slot
+				sstore(slot,add(mul(pdfSize,2),1))
+				let ptr := mload(0x40)
+				mstore(ptr,slot)
+            	mstore(0x40,add(ptr, 0x20))
+				ptr_pdfData := keccak256(ptr,0x20)
+				ptr_data := add(data,0x20)
+			}
+			mem2sto(ptr_pdfData, ptr_data, (chunkIndex-1) * CHUNKSIZE, length);
 
 			mapByCertificateType[_metaData[0]].push(metaHash);
 			mapByCourseName[_metaData[1]].push(metaHash);
@@ -104,8 +117,20 @@ contract Certificate {
 			if(!certificationList[metaHash].chunkExist[chunkIndex]){
 				certificationList[metaHash].chunkExist[chunkIndex] = true;
 				certificationList[metaHash].chunksSumSize += _data.length;
-				certificationList[metaHash].chunkBuffer.push(_data);
-				certificationList[metaHash].indexBuffer.push(chunkIndex);
+
+				bytes storage pdfData = certificationList[metaHash].pdfData;
+				uint length = _data.length;
+				assembly{
+					let slot := pdfData.slot
+					let ptr := mload(0x40)
+					mstore(ptr,slot)
+					mstore(0x40,add(ptr, 0x20))
+					ptr_pdfData := keccak256(ptr,0x20)
+					ptr_data := add(data,0x20)
+				}
+				mem2sto(ptr_pdfData, ptr_data, (chunkIndex-1) * CHUNKSIZE, length);
+
+				//certificationList[metaHash].indexBuffer.push(chunkIndex);
 				certificationList[metaHash].sizeBuffer.push(_data.length);
 				//////emit chunkAdded(pdfName, chunkIndex);
 			}
@@ -559,50 +584,55 @@ contract Certificate {
 
     //==============================================================================
 
+
+
+	// function ouputPDFdataByMetahash_(bytes32 _metaHash) internal view returns(bytes memory){
+	// 	require(certificationList[_metaHash].metadata.pdfSize == certificationList[_metaHash].chunksSumSize, "FILE DAMAGED");
+	// 	uint256 attachedSize = 0;
+	// 	uint result_p;
+	// 	uint data_p;
+	// 	uint buffer_p;
+	// 	uint slot_p;
+	// 	Cetification storage cert = certificationList[_metaHash];
+	// 	uint16[] memory indexBuffer = cert.indexBuffer;
+	// 	uint[] memory sizeBuffer = cert.sizeBuffer;
+	// 	bytes[] storage chunkBuffer = certificationList[_metaHash].chunkBuffer;
+	// 	bytes storage chunk;
+	// 	bytes memory data; //= new bytes(cert.metadata.pdfSize);
+	// 	result_p = calloc(cert.metadata.pdfSize);
+	// 	assembly{
+	// 		data_p := add(result_p, 0x20)
+	// 		slot_p := mload(0x40)
+	// 		mstore(0x40, add(slot_p,0x20))
+	// 	}
+	// 	for(uint i = 0; i < indexBuffer.length; i++){
+	// 		chunk = chunkBuffer[i];
+	// 		assembly{ 
+	// 			mstore(slot_p, chunk.slot)
+	// 			buffer_p := keccak256(slot_p, 0x20)
+	// 		}
+	// 		sto2mem(data_p + attachedSize, buffer_p, sizeBuffer[i]);
+	// 		attachedSize += sizeBuffer[i];
+	// 	}
+	// 	assembly{
+	// 		data := result_p
+	// 	}
+	// 	return data;
+	// }
+
+	uint16 testNum = 1;
+	function setTestNum(uint16 _testNum) public {
+		testNum = _testNum;
+	}
 	/**
     * export specific pdf data according to _metaHash
     * @param _metaHash The hash of the certification you want to export.
     * @return Returns the pdf data sequence.
     */
-
-	function ouputPDFdataByMetahash(bytes32 _metaHash) internal returns(bytes memory){
+	function ouputPDFdataByMetahash(bytes32 _metaHash) internal view returns(bytes memory){
 		require(certificationList[_metaHash].metadata.pdfSize == certificationList[_metaHash].chunksSumSize, "FILE DAMAGED");
-		uint256 attachedSize = 0;
-		uint result_p;
-		uint data_p;
-		uint buffer_p;
-		uint slot_p;
-		Cetification storage cert = certificationList[_metaHash];
-		uint16[] memory indexBuffer = cert.indexBuffer;
-		uint[] memory sizeBuffer = cert.sizeBuffer;
-		bytes[] storage chunkBuffer = certificationList[_metaHash].chunkBuffer;
-		bytes storage chunk;
-		bytes memory data; //= new bytes(cert.metadata.pdfSize);
-		result_p = calloc(cert.metadata.pdfSize);
-		assembly{
-			data_p := add(result_p, 0x20)
-			slot_p := mload(0x40)
-			mstore(0x40, add(slot_p,0x20))
-		}
-		for(uint i = 0; i < indexBuffer.length; i++){
-			chunk = chunkBuffer[i];
-			assembly{ 
-				mstore(slot_p, chunk.slot)
-				buffer_p := keccak256(slot_p, 0x20)
-			}
-			uint16 index = indexBuffer[i];
-			sto2mem(data_p + attachedSize, buffer_p, sizeBuffer[i]);
-			attachedSize += sizeBuffer[i];
-		}
-		assembly{
-			data := result_p
-		}
+		bytes memory data = certificationList[_metaHash].pdfData;
 		return data;
-	}
-
-	uint16 testNum = 1;
-	function setTestNum(uint16 _testNum) public {
-		testNum = _testNum;
 	}
 
     //==============================================================================
@@ -612,7 +642,7 @@ contract Certificate {
     * @param _ptr_dest the memory pointer
 	* @param _ptr_src the storage pointer
     */
-    function sto2mem(uint _ptr_dest, uint _ptr_src, uint _length)internal {
+    function sto2mem(uint _ptr_dest, uint _ptr_src, uint _length)internal view {
             uint ptr_dest =_ptr_dest;
             uint ptr_src =_ptr_src;
             uint length =_length;
@@ -630,15 +660,67 @@ contract Certificate {
             mstore(ptr_dest, or(a, b))
         }
     }
+    //==============================================================================
 
+	/**
+    * copy data form memory to storage
+    * @param _ptr_dest the storage pointer
+	* @param _ptr_src the memory pointer
+	* @param _offset the storage pointer offset (byte)
+    */
+    function mem2sto(uint _ptr_dest, uint _ptr_src, uint _offset, uint _length)internal {
+           
+		uint ptr_src =_ptr_src;
+		uint length =_length;
+		uint offset = _offset;
+		uint ptr_dest =_ptr_dest;
+
+        if(offset != 0){
+            uint slot_offset = offset/0x20;
+		    uint bytes_offset = offset % 0x20;
+		    uint bit_offset = bytes_offset * 8;
+            ptr_dest =_ptr_dest + slot_offset;
+            assembly{
+                let stoTemp := sload(ptr_dest)
+                let memTemp := mload(_ptr_src)
+                memTemp := shr(bit_offset, memTemp)
+                stoTemp := and(stoTemp, not(shr(bit_offset,not(0))))
+                stoTemp := or(stoTemp, memTemp)
+                sstore(ptr_dest, stoTemp)
+            }
+            if(length >= 32 - bytes_offset){
+                length -= (32 - bytes_offset);
+            }
+            else{
+                length = 0;
+                return;
+            }
+            ptr_src += (32 - bytes_offset); 
+            ptr_dest += 1;
+        }
+
+        for(;length>=0x20;length-=0x20){
+            assembly{
+                sstore(ptr_dest, mload(ptr_src))
+                ptr_src := add(ptr_src, 0x20)
+                ptr_dest := add(ptr_dest, 0x01)
+            }
+        }
+        assembly{
+            let mask := sub(exp(256,  sub(32, length)), 1)
+            let a := and(mload(ptr_src), not(mask))
+            let b := and(sload(ptr_dest), mask)
+            sstore(ptr_dest, or(a, b))
+        }
+    }
     //==============================================================================
 
 	/**
     * memory allocation
     * @param size size of memory that you want to apply for
-	* @return Returns the memory pointer
+	* @return ptr the memory pointer
     */
-	function calloc(uint size)internal  returns(uint ptr){
+	function calloc(uint size)internal  pure returns(uint ptr){
         assembly{
             ptr := mload(0x40)
             mstore(ptr,  size)
