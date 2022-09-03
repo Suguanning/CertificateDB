@@ -9,26 +9,27 @@ contract('certificate',(accounts)=>{
 
 		this.timeout(6000000); 
 		const instance = await Certificate.deployed();
-		for(var i = 0; i < 1; i++){
+		for(var i = 0; i < 9; i++){
 			let cert = "data\\" +String(10000000001+i);
-			await insertCertification(instance, cert, true,15);
+			await insertCertification(instance, cert, false,1);
+	
 		}
 		//await insertCertification(instance, path, false);
 
 		let certificate = await instance.returnCertificateMetadata(['*','*','*'],true);
 		let logStr = await instance.returnLogStr();
 		console.log(logStr);
+		console.log(certificate);
 		var result;
-		 for(var i = 1; i<2 ;i++){
-		 	instance.setTestNum(i+14);
-		 	let then = Date();
-			result =await instance.getCertificatePDF(['DBMI','*','*','*','*','*','*'],false)
-			let now = Date();
-			console.log('Got '+i+' pdf takes '+timeCmp(then,now)+'s');
-			console.log(result);
-			// result =await instance.getBuffer();
-			// console.log(result);
-		}
+		//for(var k = 0; k<20; k++){
+			for(var i = 1; i<2 ;i++){
+				let then = Date();
+			   result =await instance.getCertificatePDF(['*','*','Alexander Scott','*','*','*','*'],false)
+			   let now = Date();
+			   console.log(': Got pdf takes '+timeCmp(then,now)+'s');
+			   //console.log(result);
+		   }
+		//}
 	})
 })
 
@@ -38,6 +39,7 @@ async function insertCertification(instance, path, isWhole,  num){
 	let metaData = fs.readFileSync(metaPath);
 	metaData = JSON.parse(metaData);
 	if(isWhole){
+		let then = Date();
 		for(var i = metaData.length-1; i != -1; i--){
 			let data = fs.readFileSync(dataPath + metaData[i].chunk_file_name)
 			let meta = metaData[i];
@@ -49,6 +51,8 @@ async function insertCertification(instance, path, isWhole,  num){
 			let now = Date();
 			console.log(metaData[i].chunk_file_name+' transmited: '+(i+1)+'/'+metaData.length+' --- '+timeCmp(then, now)+' s');
 		}
+		let now = Date();
+		console.log(metaData[0].file_name + "inserted, size: "+metaData[0].file_size+" takes "+timeCmp(then,now)+ "s");
 	}
 	else{
 		for(var i = 0; i < num; i++){

@@ -13,17 +13,19 @@ var data = fs.readFileSync("../build/contracts/Certificate.json", "utf-8");
 //完整数据 0x1865A14DFd48EDb0b5f550C8009a3bBc6d424DDF
 //不完整数据 0xD7aEc88077Db73Ca019dc068420dd8bDeB86C364
 
-var contract = new web3.eth.Contract(JSON.parse(data).abi,'0xafd4936fa8748d2fb51a6b0c86436698e80af423');
+var contract = new web3.eth.Contract(JSON.parse(data).abi,'0xf6988a1d66fb036aecdc5cdd84c6be87a211a3d1');
 
 
 // contract.methods.store(200).send({from:'0x51BF497D8B47C5754220be9256F0Cb9E2Cd688B8'}).then(console.log);
 async function test(){
 	console.log("code begin");
-	await contract.methods.returnCertificateMetadata(['*','*','*'],false).call().then(output);
+	await contract.methods.returnCertificateMetadata(['Human Genome','*','*'],false).call().then(output);
 	// for(var i = 1; i < 58; i++){
 	 //	await contract.methods.setTestNum(1).call();
 	// 	let then = date.format(Date(),'HH:mm:ss');
-	await contract.methods.getCertificatePDF(['DBMI','*','*','*','*','*','*'],false).call().then(ouputPdf);
+	//await contract.methods.returnLogStr().call().then(console.log)
+	await contract.methods.getCertificatePDF(['DBMI','*','*','*','*','*','*'],false).call();//.then(ouputPdf);
+	await contract.methods.returnLogStr().call().then(console.log)
 	// 	let now = date.format(Date(),'HH:mm:ss');
 	// 	console.log('got '+i+' chunks takes '+timeCmp(then, now)+' seconds');
 	// }

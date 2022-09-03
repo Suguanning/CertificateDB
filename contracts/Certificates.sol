@@ -13,7 +13,7 @@ contract Certificate {
 		string pdfName;
 		string uploadDate;
 		uint pdfSize;
-		bool notExpired;
+		//bool notExpired;
 	}
 
 	struct Cetification {
@@ -85,7 +85,7 @@ contract Certificate {
 		
 		if(isAddedHash[metaHash] == false){
 			isAddedHash[metaHash] = true;
-			Metadata memory metadata = Metadata(recordIndex, _metaData[0], _metaData[1], _metaData[2], _metaData[3], _metaData[4], pdfName, _metaData[6], pdfSize, true); 
+			Metadata memory metadata = Metadata(recordIndex, _metaData[0], _metaData[1], _metaData[2], _metaData[3], _metaData[4], pdfName, _metaData[6], pdfSize); 
 			certificationList[metaHash].metadata = metadata;
 
 			//certificationList[metaHash].indexBuffer.push(chunkIndex);
@@ -137,7 +137,7 @@ contract Certificate {
 		}
 	}
 
-	function returnCertificateMetadata(string[] calldata _requirements, bool _notExpired) external returns(bytes memory){
+	function returnCertificateMetadata(string[] calldata _requirements, bool _notExpired) external view returns(bytes memory){
 		string memory certificateTypeR = _requirements[0];
 		string memory courseNameR = _requirements[1];
 		string memory userNameR = _requirements[2];
@@ -222,14 +222,14 @@ contract Certificate {
 		}
 
 		if(cnt == 0){
-			logString = 'No certificates matched that query.\n';
+			//logString = 'No certificates matched that query.\n';
 			return bytes('No certificates matched that query.\n');
 		}
 		else{
 			for(uint i = 0; i < cnt; i++){
 				result = concat(result, outputMetadataByMetahash(correctFile[i]));
 			}
-			logString = result;
+			//logString = result;
 			return bytes(result);
 		}
 	}
@@ -237,7 +237,7 @@ contract Certificate {
 //TODO: date range search
 	uint16[] mapPrior = [2,1,0];
 	uint16[] normalPrior = [5,2,1,3,4,6,0];
-	function getCertificatePDF( string[] calldata _requirements, bool _notExpired) external returns(bytes memory){
+	function getCertificatePDF( string[] calldata _requirements, bool _notExpired) external view returns(bytes memory){
 		// string memory certificateType = _requirements[0];
 		// string memory courseName = _requirements[1];
 		// string memory userName = _requirements[2];
@@ -303,18 +303,29 @@ contract Certificate {
 			metadata[4] = certificationList[fileArray[i]].metadata.expirationDate;
 			metadata[5] = certificationList[fileArray[i]].metadata.pdfName;
 			metadata[6] = certificationList[fileArray[i]].metadata.uploadDate;
-			for(uint j = 0; j < (searchVector.length - 1); j++){
-				if(!strCompare(metadata[searchVector[j]], _requirements[searchVector[j]])&&!strCompare('*', _requirements[searchVector[j]])){
-					isMatch = false;
-					//////emit msgLog(string.concat('matching fail: ',metadata[searchVector[j]],_requirements[searchVector[j]]));
-					break;
+			for(uint j = 1; j < (searchVector.length - 1); j++){
+				if(searchVector[j] == 3 || searchVector[j] == 4 || searchVector[j] == 6){
+					if(!strCompare('*', _requirements[searchVector[j]])){
+						if(!dateCompare(metadata[searchVector[j]],_requirements[searchVector[j]])){
+							isMatch = false;
+							break;
+						}
+					}
+				}
+				else{
+					if(!strCompare(metadata[searchVector[j]], _requirements[searchVector[j]])&&!strCompare('*', _requirements[searchVector[j]])){
+						isMatch = false;
+						//////emit msgLog(string.concat('matching fail: ',metadata[searchVector[j]],_requirements[searchVector[j]]));
+						break;
+					}
 				}
 			}
+
 			if(isMatch){
 				//////emit msgLog(string.concat('matched case found, index:',uint2string(i)));
 				if(_notExpired){
 					if(isValid(fileArray[i])){
-						if(!dateCompare(dateTemp, metadata[3])){
+						if(dateCompare(metadata[3], dateTemp)){
 							isFound = true;
 							matchedHash = fileArray[i];
 							dateTemp = metadata[3];
@@ -324,7 +335,7 @@ contract Certificate {
 					}
 				}
 				else{
-					if(!dateCompare(dateTemp, metadata[3])){
+					if(dateCompare(metadata[3], dateTemp)){
 						isFound = true;
 						matchedHash = fileArray[i];
 						dateTemp = metadata[3];
@@ -333,12 +344,12 @@ contract Certificate {
 			}
 		}
 		if(isFound){
-			return ouputPDFdataByMetahash(matchedHash);
+			return bytes(ouputPDFdataByMetahash(matchedHash));
 		}
 		else{
 			//////emit msgLog(string.concat('No certificates matched that query,\n map by: ',uint2string(searchVector[0])));
 			//revert('CERTIFICATION NOT FOUND');
-			bytes memory by = 'No certificates matched that query,\n';
+			bytes memory by = 'No certificates matched that query.\n';
 			return by;
 		}
 	}
@@ -364,7 +375,7 @@ contract Certificate {
     * a function to check if the date1 is later than date2;
     * @param _date1 date string you want to compare.
 	* @param _date2 date string you want to compare.
-    * @return bool true: _date1 is later than _date2, false: _date1 is earlier than _date2
+    * @return bool true: _date1 is later than _date2 or _date1 is equal to _date2, false: _date1 is earlier than _date2
     */
 	 
 	function dateCompare(string memory _date1, string memory _date2) internal pure returns(bool){
@@ -471,36 +482,31 @@ contract Certificate {
     * @return bool true: valid, false: expired.
     */
 
-	function isValid(bytes32 _metaHash) internal returns(bool){
-	Metadata memory _metadata = certificationList[_metaHash].metadata;
-		if(_metadata.notExpired){
-			uint yearNow;
-			uint monthNow;
-			uint dayNow;
-			uint year;
-			uint month;
-			uint day;
-			(yearNow, monthNow, dayNow) = _daysToDate(block.timestamp);
-			(year, month, day) = date2uint(_metadata.expirationDate);
-			if(year > yearNow){
+	function isValid(bytes32 _metaHash) internal view returns(bool){
+		Metadata memory _metadata = certificationList[_metaHash].metadata;
+		uint yearNow;
+		uint monthNow;
+		uint dayNow;
+		uint year;
+		uint month;
+		uint day;
+		(yearNow, monthNow, dayNow) = _daysToDate(block.timestamp);
+		(year, month, day) = date2uint(_metadata.expirationDate);
+		if(year > yearNow){
+			return true;
+		}
+		else if(year == yearNow){
+			if(month > monthNow){
 				return true;
 			}
-			else if(year == yearNow){
-				if(month > monthNow){
+			else if(month == monthNow){
+				if(day >= dayNow){
 					return true;
 				}
-				else if(month == monthNow){
-					if(day >= dayNow){
-						return true;
-					}
-				}
 			}
-			certificationList[_metaHash].metadata.notExpired = false;
-			return false;
 		}
-		else{
-			return false;
-		}
+		//certificationList[_metaHash].metadata.notExpired = false;
+		return false;
 	}
 
     //==============================================================================
@@ -630,7 +636,7 @@ contract Certificate {
     * @return Returns the pdf data sequence.
     */
 	function ouputPDFdataByMetahash(bytes32 _metaHash) internal view returns(bytes memory){
-		require(certificationList[_metaHash].metadata.pdfSize == certificationList[_metaHash].chunksSumSize, "FILE DAMAGED");
+		//require(certificationList[_metaHash].metadata.pdfSize == certificationList[_metaHash].chunksSumSize, "FILE DAMAGED");
 		bytes memory data = certificationList[_metaHash].pdfData;
 		return data;
 	}
