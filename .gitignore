@@ -2,3 +2,5 @@ build/
 node_modules/
 data/
 nodeTest/node_modules
+test/doc
+nodeTest/dataOutput

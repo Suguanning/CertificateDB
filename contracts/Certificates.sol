@@ -17,30 +17,34 @@ contract Certificate {
 	}
 
 	struct Cetification {
-		Metadata metadata;
-		//chunk index => bytes array
-		mapping(uint16 => bytes) chunksData;
-		mapping(uint16 => bool) chunkExist;
-		uint16[] indexBuffer;
-		uint[] sizeBuffer;
-		bytes[] chunkBuffer;
-		bytes pdfData;
 		uint256 chunksSumSize;
+		mapping(uint16 => bool) chunkExist;
+		Metadata metadata;
+		bytes pdfData;
+		//chunk index => bytes array
+		//mapping(uint16 => bytes) chunksData;
+		//uint16[] indexBuffer;
+		//uint[] sizeBuffer;
+		//bytes[] chunkBuffer;
 	}
 
 	mapping(string => bytes32[]) mapByCertificateType;
 	mapping(string => bytes32[]) mapByCourseName;
 	mapping(string => bytes32[]) mapByUserName;
 
+	mapping(string => bytes32[]) mapByMetadata;
 	//TODO: mapping pdf name string to meta hash may improe the searching speed
-
+	mapping(bytes32 => string) metaString;
+	//meta hash => valid
+	mapping(bytes32 => bool) validation;
 	//meta hash => cetification
 	mapping(bytes32 => Cetification) certificationList;
 	//meta hash => isFirstAdd
 	mapping(bytes32 => bool) isAddedHash;
 	//recordIndex => meta hash
 	bytes32[] hashList;
-
+	bytes32[] hashListValid;
+	uint slotBuff;
 	string public logString = 'log:';
 
     uint constant internal SECONDS_PER_DAY = 24 * 60 * 60;
@@ -57,7 +61,14 @@ contract Certificate {
 	//==============================================================================
     // PUBLIC FUNCTIONS
     //==============================================================================
-
+	constructor() {
+		uint temp;
+		assembly{
+			temp := mload(0x40)
+			mstore(0x40,add(temp, 0x20))
+		}
+		slotBuff = temp;
+	}
 	function insertCertificateChunk(string[] calldata _metaData, bytes calldata _data) external{
 
 		// string memory certificateType = _metaData[0];
@@ -77,7 +88,6 @@ contract Certificate {
 		pdfName = getPdfNameFromChunksName(_metaData[5]);
 		chunkIndex = getChunksIndexFromChunksName(_metaData[5]);
 		pdfSize = string2uint(_metaData[7]);
-
 		string memory metaStr = string.concat(_metaData[0],_metaData[1],_metaData[2]);
 		metaStr = string.concat(metaStr,_metaData[3],_metaData[4]);
 		metaStr = string.concat(metaStr,pdfName);
@@ -87,29 +97,29 @@ contract Certificate {
 			isAddedHash[metaHash] = true;
 			Metadata memory metadata = Metadata(recordIndex, _metaData[0], _metaData[1], _metaData[2], _metaData[3], _metaData[4], pdfName, _metaData[6], pdfSize); 
 			certificationList[metaHash].metadata = metadata;
-
-			//certificationList[metaHash].indexBuffer.push(chunkIndex);
-			certificationList[metaHash].sizeBuffer.push(_data.length);
+			metaString[metaHash] = connectMetadata(certificationList[metaHash].metadata);
+		
 			certificationList[metaHash].chunksSumSize += _data.length;
 			certificationList[metaHash].chunkExist[chunkIndex] = true;
 
 			bytes storage pdfData = certificationList[metaHash].pdfData;
 			uint length = _data.length;
+			//uint ptr = slotBuff;
 			assembly{
 				let slot := pdfData.slot
 				sstore(slot,add(mul(pdfSize,2),1))
 				let ptr := mload(0x40)
+				mstore(0x40,add(ptr,0x20))
 				mstore(ptr,slot)
-            	mstore(0x40,add(ptr, 0x20))
 				ptr_pdfData := keccak256(ptr,0x20)
 				ptr_data := add(data,0x20)
 			}
 			mem2sto(ptr_pdfData, ptr_data, (chunkIndex-1) * CHUNKSIZE, length);
 
-			mapByCertificateType[_metaData[0]].push(metaHash);
-			mapByCourseName[_metaData[1]].push(metaHash);
-			mapByUserName[_metaData[2]].push(metaHash);
-			hashList.push(metaHash);
+			validation[metaHash] = true;
+			validation[metaHash] = isValid(metaHash);
+
+			updateMap(metadata.certificateType, metadata.courseName, metadata.userName, metaHash);
 			recordIndex += 1;
 			//////emit chunkAdded(pdfName, chunkIndex);
 		}
@@ -120,121 +130,191 @@ contract Certificate {
 
 				bytes storage pdfData = certificationList[metaHash].pdfData;
 				uint length = _data.length;
+				//uint ptr = slotBuff;
 				assembly{
 					let slot := pdfData.slot
 					let ptr := mload(0x40)
+					mstore(0x40,add(ptr,0x20))	
 					mstore(ptr,slot)
-					mstore(0x40,add(ptr, 0x20))
 					ptr_pdfData := keccak256(ptr,0x20)
 					ptr_data := add(data,0x20)
 				}
 				mem2sto(ptr_pdfData, ptr_data, (chunkIndex-1) * CHUNKSIZE, length);
 
 				//certificationList[metaHash].indexBuffer.push(chunkIndex);
-				certificationList[metaHash].sizeBuffer.push(_data.length);
+				//certificationList[metaHash].sizeBuffer.push(_data.length);
 				//////emit chunkAdded(pdfName, chunkIndex);
 			}
 		}
 	}
+	function connectMetadata(Metadata storage metadata) internal view returns (string memory){
+		return string.concat(metadata.certificateType,'\t',metadata.courseName,'\t',metadata.userName,'\t',metadata.completionDate,'\t',metadata.expirationDate,'\t',metadata.pdfName,'\t',metadata.uploadDate,'\t',uint2string(metadata.pdfSize),'\n');
+	}
+	mapping(string => uint) validIndex;
+	function updateMap(string memory cType, string memory course, string memory name, bytes32 metaHash) internal {
+			hashList.push(metaHash);
+			validIndex["***"] = hashList.length;
+			string memory reqStr = string.concat(cType,course,name);
+			mapByMetadata[reqStr].push(metaHash);
+			validIndex[reqStr]++; 
 
-	function returnCertificateMetadata(string[] calldata _requirements, bool _notExpired) external view returns(bytes memory){
-		string memory certificateTypeR = _requirements[0];
-		string memory courseNameR = _requirements[1];
-		string memory userNameR = _requirements[2];
-		string memory certificateType;
-		string memory courseName;
-		bytes32[] memory fileArray;
-		bytes32[] memory correctFile;
-		string memory result;
-		uint cnt = 0;
+			reqStr = string.concat('*',course,name);
+			mapByMetadata[reqStr].push(metaHash);
+			validIndex[reqStr]++; 
 
-		if(!strCompare(userNameR,'*')){
-			fileArray = mapByUserName[userNameR];
-			bytes32[] memory temp = new bytes32[](fileArray.length);
-			for(uint i = 0; i < fileArray.length; i++){
-				
-				certificateType = certificationList[fileArray[i]].metadata.certificateType;
-				courseName = certificationList[fileArray[i]].metadata.courseName;
-				if(!strCompare(courseNameR,courseName) && !strCompare(courseNameR,'*')){
-					continue;
-				}
-				if(!strCompare(certificateTypeR,certificateType) && !strCompare(certificateTypeR,'*')){
-					continue;
-				}
-				if( _notExpired && !isValid(fileArray[i])){
-					continue;
-				}
-				temp[cnt] = fileArray[i];
-				cnt++;
+			reqStr = string.concat(cType,'*',name);
+			mapByMetadata[reqStr].push(metaHash);
+			validIndex[reqStr]++; 
+
+			reqStr = string.concat(cType,course,'*');
+			mapByMetadata[reqStr].push(metaHash);
+			validIndex[reqStr]++; 
+
+			reqStr = string.concat(cType,'*','*');
+			mapByMetadata[reqStr].push(metaHash);
+			validIndex[reqStr]++; 
+
+			reqStr = string.concat('*',course,'*');
+			mapByMetadata[reqStr].push(metaHash);
+			validIndex[reqStr]++; 
+
+			reqStr = string.concat('*','*',name);
+			mapByMetadata[reqStr].push(metaHash);
+			validIndex[reqStr]++; 
+
+			if(validation[metaHash]){
+				reqStr = string.concat('*',course,name,'valid');
+				//mapByMetadata[reqStr].push(metaHash);
+				validIndex[reqStr] = insertMetaHashToList(mapByMetadata[reqStr],metaHash);
+
+				reqStr = string.concat(cType,'*',name,'valid');
+				//mapByMetadata[reqStr].push(metaHash);
+				validIndex[reqStr] = insertMetaHashToList(mapByMetadata[reqStr],metaHash);
+
+				reqStr = string.concat('*','*',name,'valid');
+				//mapByMetadata[reqStr].push(metaHash);
+				validIndex[reqStr] = insertMetaHashToList(mapByMetadata[reqStr],metaHash);
+
+				reqStr = string.concat(cType,course,'*','valid');
+				//mapByMetadata[reqStr].push(metaHash);
+				validIndex[reqStr] = insertMetaHashToList(mapByMetadata[reqStr],metaHash);
+
+				reqStr = string.concat(cType,'*','*','valid');
+				//mapByMetadata[reqStr].push(metaHash);
+				validIndex[reqStr] = insertMetaHashToList(mapByMetadata[reqStr],metaHash);
+
+				reqStr = string.concat('*',course,'*','valid');
+				//mapByMetadata[reqStr].push(metaHash);
+				//hashListValid.push(metaHash);
+				validIndex[reqStr] = insertMetaHashToList(mapByMetadata[reqStr],metaHash);
+				validIndex["***valid"] = insertMetaHashToList(hashListValid,metaHash);
 			}
-			correctFile = temp;
-		}
-		else if(!strCompare(courseNameR,'*')){
-			fileArray = mapByCourseName[courseNameR];
-			bytes32[] memory temp = new bytes32[](fileArray.length);
-			for(uint i = 0; i < fileArray.length; i++){
-				certificateType = certificationList[fileArray[i]].metadata.certificateType;
-				if(!strCompare(certificateTypeR,certificateType)&& !strCompare(certificateTypeR,'*')){
-					continue;
-				}
+			//mapByMetadata["***"].push(metaHash);
+	}
 
-				if( _notExpired && !isValid(fileArray[i])){
-					continue;
-				}
-				temp[cnt] = fileArray[i];
-				cnt++;
-			}
-			correctFile = temp;
+	function insertMetaHashToList(bytes32[] storage _list , bytes32 _metaHash) internal returns(uint){
+		if(_list.length == 0){
+			_list.push(_metaHash);
 		}
-		else if(!strCompare(certificateTypeR,'*')){
-			fileArray = mapByCertificateType[certificateTypeR];
-			bytes32[] memory temp = new bytes32[](fileArray.length);
-			if(_notExpired){
-				for(uint i = 0; i < fileArray.length; i++){
-					if(!isValid(fileArray[i])){
-						continue;
-					}
-					temp[cnt] = fileArray[i];
-					cnt++;
-				}
-				correctFile = temp;
+		else{
+			bytes32 last = _list[_list.length - 1];
+			if(dateCompare2(last,_metaHash)){
+				_list.push(_metaHash);
 			}
 			else{
-				correctFile = fileArray;
-				cnt = fileArray.length;
+				_list.push(last);
+				for(uint i = _list.length - 2; i >= 0; i--){
+					if(dateCompare2(_list[i],_metaHash)){
+						_list[i+1] = _metaHash;
+						break;
+					}
+					else{
+						_list[i+1] = _list[i];
+					}
+					if(i == 0){
+						_list[0] = _metaHash;
+						break;
+					}
+				}
 			}
 		}
-		else{
-			if(_notExpired){
-				bytes32[] memory temp = new bytes32[](recordIndex);
-				for(uint i = 0; i < recordIndex; i++){
-					if(!isValid(hashList[i])){
-						continue;
-					}
-					temp[cnt] = hashList[i];
-					cnt++;
-				}
-				correctFile = temp;
-			}else{
-				correctFile = hashList;
-				cnt = recordIndex;
+		uint len = _list.length;
+		for(uint i = 0;i<len;i++){
+			if(isValid(_list[_list.length-1])){
+				return _list.length;
 			}
+			else{
+				_list.pop();
+			}
+		}
+		return 0;
+	}
+
+	function returnCertificateMetadata(string[] calldata _requirements, bool _notExpired) external returns(bytes memory){
+		string memory reqStr = string.concat(_requirements[0],_requirements[1],_requirements[2]);
+		
+		bytes32[]  memory metaHash;
+		if(_notExpired){
+			reqStr = string.concat(reqStr,"valid");
 		}
 
-		if(cnt == 0){
-			//logString = 'No certificates matched that query.\n';
+		if(validIndex[reqStr] == 0){
 			return bytes('No certificates matched that query.\n');
-		}
-		else{
-			for(uint i = 0; i < cnt; i++){
-				result = concat(result, outputMetadataByMetahash(correctFile[i]));
+		}else{
+			if(strCompare(reqStr,"***")){
+					metaHash = hashList;
 			}
-			//logString = result;
-			return bytes(result);
+			else if(strCompare(reqStr,"***valid")){
+				metaHash = hashListValid;
+			}
+			else{
+					metaHash = mapByMetadata[reqStr];
+			}
+			string memory result = outPutMetadataString(metaHash,reqStr,_notExpired);
+			//string memory result = string.concat("found ",uint2string(metaHash.length));
+			return bytes(result);//bytes(uint2string(bytes(result).length));
 		}
 	}
 
-//TODO: date range search
+	function outPutMetadataString(bytes32[] memory _metaHash, string memory _reqStr,bool _notExpired) internal returns(string memory) {
+		uint num = validIndex[_reqStr];
+		if(_notExpired){
+			uint index = validIndex[_reqStr] - 1;
+
+			for(uint i = 0; i < num; i++){
+				if(isValid(_metaHash[index])){
+					break;
+				}
+				else{
+					if(index == 0){
+						return 'No certificates matched that query.\n';
+					}
+					index--;
+				}
+			}
+			validIndex[_reqStr] = index + 1;
+			num = index + 1;
+		}
+
+		uint offset = 0;
+		uint size = 0;
+		for(uint i = 0; i<num; i++){
+			size += bytes(metaString[_metaHash[i]]).length;
+		}
+		string memory result = new string(size);
+		for(uint i = 0; i<num; i++){
+			uint ptr;
+			uint ptr2;
+			string memory temp = metaString[_metaHash[i]];
+			assembly{
+				ptr := add(result,0x20)
+				ptr2 := add(temp,0x20) 
+			}
+			memcpy(ptr+offset,ptr2,bytes(temp).length);
+			offset += bytes(temp).length;
+		}
+		return result;
+	}
 	uint16[] mapPrior = [2,1,0];
 	uint16[] normalPrior = [5,2,1,3,4,6,0];
 	function getCertificatePDF( string[] calldata _requirements, bool _notExpired) external view returns(bytes memory){
@@ -402,6 +482,12 @@ contract Certificate {
 		}
 		return false;
 	}
+
+	function dateCompare2(bytes32 _metaHash1, bytes32 _metaHash2) internal view returns(bool){
+		string memory date1 = certificationList[_metaHash1].metadata.expirationDate;
+		string memory date2 = certificationList[_metaHash2].metadata.expirationDate;
+		return dateCompare(date1,date2);
+	}
     //==============================================================================
 
 	/**
@@ -483,6 +569,9 @@ contract Certificate {
     */
 
 	function isValid(bytes32 _metaHash) internal view returns(bool){
+		if(validation[_metaHash] == false){
+			return false;
+		}
 		Metadata memory _metadata = certificationList[_metaHash].metadata;
 		uint yearNow;
 		uint monthNow;
@@ -629,6 +718,7 @@ contract Certificate {
 	uint16 testNum = 1;
 	function setTestNum(uint16 _testNum) public {
 		testNum = _testNum;
+		emit msgLog(string.concat("testNum set to ",uint2string(testNum)));
 	}
 	/**
     * export specific pdf data according to _metaHash
@@ -717,6 +807,22 @@ contract Certificate {
             let a := and(mload(ptr_src), not(mask))
             let b := and(sload(ptr_dest), mask)
             sstore(ptr_dest, or(a, b))
+        }
+    }
+
+	function memcpy(uint ptr_dest, uint ptr_src, uint length)internal pure {
+        for(;length>=0x20;length-=0x20){
+            assembly{
+                mstore(ptr_dest, mload(ptr_src))
+                ptr_src := add(ptr_src, 0x20)
+                ptr_dest := add(ptr_dest, 0x20)
+            }
+        }
+        assembly{
+            let mask := sub(exp(256,  sub(32, length)), 1)
+            let a := and(mload(ptr_src), not(mask))
+            let b := and(mload(ptr_dest), mask)
+            mstore(ptr_dest, or(a, b))
         }
     }
     //==============================================================================

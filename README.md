@@ -25,4 +25,4 @@
     ./nodeTest/test.js
 
 ## 启动Ganache
-    ganache -g 1 -l 50000000000 --miner.callGasLimit 50000000000
+    ganache -g 1 -l 268435455 --miner.callGasLimit 268435455
