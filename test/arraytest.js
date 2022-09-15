@@ -7,7 +7,7 @@ contract('certificate',(accounts)=>{
     })
     it('test 2',async ()=>{
         const instance = await Test.deployed();
-        await instance.test2();
+        await instance.test1();
 
     })
 })

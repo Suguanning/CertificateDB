@@ -196,38 +196,4 @@ contract Test{
         emit msgLog(str ,bytes(str).length);
     }
 
-    bytes[] arrayList;
-    function test1() public{
-        string memory str1 = '123333333333333333333333333333333333333333333333333333333333333333333';
-        arrayList.push(bytes(str1));
-        arrayList.push(bytes(str1));
-        arrayList.push(bytes(str1));
-        for(uint i = 0; i< arrayList.length; i++){
-            bytes memory temp = arrayList[i];
-            assembly{
-                mstore(temp, 2)
-            }
-            emit bytesLog(temp);
-        }
-
-    }
-
-    address[] public objList;
-    function creatObj() public{
-        Object obj = Object();
-        obj.addCnt();
-        objList.push(obj); 
-    }
-}
-
-contract Object{
-    uint cnt;
-    event msgLog(string str,uint num);
-    function addCnt() public{
-        cnt++;
-    }
-    function getCnt() public returns(uint){
-        emit msgLog("the cnt is :",cnt);
-        return cnt;
-    }
 }

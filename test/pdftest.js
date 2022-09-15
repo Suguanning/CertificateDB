@@ -15,7 +15,7 @@ contract('certificate',(accounts)=>{
 		for(var i = 0; i < 50; i++){
 			let cert = "data\\" +String(10000000001+i);
 			//let cert = "data\\" +String(10000000001);
-			await insertCertification(instance, cert, false,1);
+			await insertCertification(instance, cert, true,1);
 		}
 		//let certificate = await instance.returnCertificateMetadata(['*','*','*'],false);
 		//let logStr = await instance.returnLogStr();
