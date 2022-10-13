@@ -1,9 +1,9 @@
 var Web3 = require("web3");
 var fs = require("fs");
-var web3 = new Web3(new Web3.providers.HttpProvider('http://172.30.104.156:8545'));
+var web3 = new Web3(new Web3.providers.HttpProvider('http://127.0.0.1:8545'));
 var data = fs.readFileSync("../build/contracts/Certificate.json", "utf-8");
 //合约地址
-var contractAddr  = '0xe8042d32149b0ce8029048Cc5fB07b7dC7084ab4';
+var contractAddr  = '0x006e889ebEAF761223B5fc028aB3033eD25155D0';
 var defaultAddr
 var contract = new web3.eth.Contract(JSON.parse(data).abi,contractAddr,{});
 
@@ -24,16 +24,18 @@ let then = Date.now();
 let now = Date().now();
 let diff = now - then; //diff为单位为毫秒的时间差
 */
+
 /*
 输出用console.log
 */
+
 async function test(){
 
 //一些需要初始化的东西
 	await web3.eth.getAccounts().then(setDefaultAcc);
 	var sendObj = {from:defaultAddr, gasPrice:'268435455',gas:268435455};
 //测试代码写这里
-	insertCertification(sendObj,"../data/10000000002",true,1);
+	//insertCertification(sendObj,"../data/10000000006",true,1);
 	//await contract.methods.returnCertificateMetadata(['*','*','*'],false).call().then(output);
 	//await contract.methods.getCertificatePDF(['DBMI','*','*','*','*','*','*'],false).call().then(outputPdf);
 
@@ -118,11 +120,6 @@ async function insertCertification(sendObj, path, isWhole,  num){
 	}
 }
 function timeCmp (_then, _now) {
-	// let then = date.format(_then, "HH:mm:ss");
-	// let now = date.format(_now, "HH:mm:ss");
-	// secdif = parseInt(now.slice(6,8)) - parseInt(then.slice(6,8));
-	// mindif = parseInt(now.slice(3,5)) - parseInt(then.slice(3,5));
-	// hourdif = parseInt(now.slice(0,2)) - parseInt(then.slice(0,2));
 	return _now - _then;//secdif + mindif*60 + hourdif*3600;
   }
 test();

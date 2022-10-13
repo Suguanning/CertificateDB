@@ -1,4 +1,4 @@
-const Certificate = artifacts.require("Certificate");
+const pdfStorageAndRetrieval = artifacts.require("pdfStorageAndRetrieval");
 const path ="data\\10000000001";
 const data_path = "data\\10000000001\\chunks\\";
 let fs = require("fs");
@@ -11,13 +11,14 @@ contract('certificate',(accounts)=>{
 	it('test insert hash',async function () {
 
 		this.timeout(6000000); 
-		const instance = await Certificate.deployed();
-		for(var i = 0; i < 50; i++){
-			let cert = "data\\" +String(10000000001+i);
+		const instance = await pdfStorageAndRetrieval.deployed();
+		for(var i = 0; i < 20; i++){
+			let cert = "data\\" +String(10000000005+i);
 			//let cert = "data\\" +String(10000000001);
 			await insertCertification(instance, cert, true,1);
 		}
-		//let certificate = await instance.returnCertificateMetadata(['*','*','*'],false);
+		let certificate = await instance.returnCertificateMetadata(['*','*','*'],true);
+		//await instance.getCertificatePDF(['DBMI','*','*','*','06/10/2026','*','*'],false);
 		//let logStr = await instance.returnLogStr();
 		//console.log(logStr);
 		console.log(instance.address);

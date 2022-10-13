@@ -14,15 +14,15 @@ var data = fs.readFileSync("../build/contracts/Certificate.json", "utf-8");
 //完整数据 0x1865A14DFd48EDb0b5f550C8009a3bBc6d424DDF
 //不完整数据 0xD7aEc88077Db73Ca019dc068420dd8bDeB86C364
 // 0xbDf75194C401659cc21868C3dF4b594027b0ac5A takes 91.169 s
-var contract = new web3.eth.Contract(JSON.parse(data).abi,'0x294af3C2591706f8c8Fd18779AD373752d1BA4B3');
+var contract = new web3.eth.Contract(JSON.parse(data).abi,'0x70cA60146EdD1249a54E7F104e6A1045C8232bD4');
 
-var testTimes = 1;
+var testTimes = 10;
 var notExpire = true;
 // contract.methods.store(200).send({from:'0x51BF498B47C5754220be9256F0Cb9E2Cd688B8'}).then(console.log);
 async function test3(){
 	let then = Date.now();
-	//await contract.methods.returnCertificateMetadata(['Human Genome','*','*'],notExpire).call().then(output);
-	await contract.methods.getCertificatePDF(['Human Genome','*','*','*','*','*','06/10/2022'],notExpire).call().then(outputPdf);
+	await contract.methods.returnCertificateMetadata(['*','*','Amy Nguyen'],notExpire).call().then(output);
+	//await contract.methods.getCertificatePDF(['*','Biomedical Data Only Research','Amy Nguyen','*','05/03/2024','*','*'],notExpire).call().then(outputPdf);
 	let now = Date.now(); 
 	console.log("takes " + (now - then)/1000+ " s");
 	//sum += ((now - then)/1000);
