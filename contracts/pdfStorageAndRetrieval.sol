@@ -116,7 +116,81 @@ contract pdfStorageAndRetrieval {
 			}
 		}
 	}
+	function connectMetadata(Metadata storage metadata) internal view returns (string memory){
+		return string.concat(metadata.certificateType,'\t',metadata.courseName,'\t',metadata.userName,'\t',metadata.completionDate,'\t',metadata.expirationDate,'\t',metadata.pdfName,'\t',metadata.uploadDate,'\t',uint2string(metadata.pdfSize),'\n');
+	}
 
+	function updateMap(string memory cType, string memory course, string memory name, bytes32 metaHash) internal {
+			
+			//hashList.push(metaHash);
+			uint year;
+			uint month;
+			uint day;
+			(year, month, day) = date2uint(certificationList[metaHash].metadata.expirationDate);
+			uint date = year*100+month;
+			if(date>=latestDateG){
+				latestDateG = date;
+			}
+
+			hashList.push(metaHash);
+			mapByStrAndTime["***"][date].push(metaHash);
+			updateLatestHash("***",metaHash);
+
+			string memory reqStr = string.concat(cType,course,name);
+			mapByMetadata[reqStr].push(metaHash);
+			updateLatestHash(reqStr,metaHash);
+
+			reqStr = string.concat('*',course,name);
+			mapByMetadata[reqStr].push(metaHash);
+			updateLatestHash(reqStr,metaHash);
+
+			reqStr = string.concat(cType,'*',name);
+			mapByMetadata[reqStr].push(metaHash);
+			updateLatestHash(reqStr,metaHash);
+
+			reqStr = string.concat(cType,course,'*');
+			mapByStrAndTime[reqStr][date].push(metaHash);
+			mapByMetadata[reqStr].push(metaHash);
+			updateLatestHash(reqStr,metaHash);
+
+			reqStr = string.concat(cType,'*','*');
+			mapByStrAndTime[reqStr][date].push(metaHash);
+			mapByMetadata[reqStr].push(metaHash);
+			updateLatestHash(reqStr,metaHash);
+ 
+			reqStr = string.concat('*',course,'*');
+			mapByStrAndTime[reqStr][date].push(metaHash);
+			mapByMetadata[reqStr].push(metaHash);
+			updateLatestHash(reqStr,metaHash);
+
+			reqStr = string.concat('*','*',name);
+			mapByMetadata[reqStr].push(metaHash);
+			updateLatestHash(reqStr,metaHash);
+
+	}
+
+	function updateLatestHash(string memory reqStr, bytes32 _metaHash) internal {
+		if(latestComplete[reqStr] == bytes32(0)){
+			latestComplete[reqStr] = _metaHash;
+		}
+		else{
+			if(completeDateCmp(_metaHash,latestComplete[reqStr])){
+				latestComplete[reqStr] = _metaHash;
+			}
+		}
+	}
+
+	function dateAdd(uint _date) internal pure returns(uint){
+		uint month = _date % uint(100);
+		uint result;
+		if(month >= 12){
+			result = _date - month + 101;
+		}
+		else{
+			result = _date + 1;
+		}
+		return result;
+	}
 	function returnCertificateMetadata(string[] calldata _requirements, bool _notExpired) external view returns(bytes memory){
 		string memory reqStr = string.concat(_requirements[0],_requirements[1],_requirements[2]);
 		string memory result = new string(maxStrLen);
@@ -201,6 +275,20 @@ contract pdfStorageAndRetrieval {
 
 	}
 
+	function addStr2Result(uint _resPtr, bytes32 _metaHash, uint _offset) internal view returns(uint) {
+		uint ptr;
+		uint ptr2;
+		uint offset = _offset;
+		string memory temp = metaString[_metaHash];
+		assembly{
+			ptr := add(_resPtr,0x20)
+			ptr2 := add(temp,0x20) 
+		}
+		memcpy(ptr+offset,ptr2,bytes(temp).length);
+		offset += bytes(temp).length;
+		return offset;
+	}
+
 	function getCertificatePDF( string[] calldata _requirements, bool _notExpired) external view returns(bytes memory){
 		// string memory certificateType = _requirements[0];
 		// string memory courseName = _requirements[1];
@@ -229,6 +317,7 @@ contract pdfStorageAndRetrieval {
 				}
 			}
 		}
+
 
 		if(!strCompare(uploadDate,"*")){
 			if(!dateCompare(certificationList[result].metadata.uploadDate, uploadDate)){
@@ -269,25 +358,7 @@ contract pdfStorageAndRetrieval {
 		}
 		return ouputPDFdataByMetahash(result);
 	}
-
-    //==============================================================================
-    // PRIVATE FUNCTIONS
-    //==============================================================================
-
-	function addStr2Result(uint _resPtr, bytes32 _metaHash, uint _offset) internal view returns(uint) {
-		uint ptr;
-		uint ptr2;
-		uint offset = _offset;
-		string memory temp = metaString[_metaHash];
-		assembly{
-			ptr := add(_resPtr,0x20)
-			ptr2 := add(temp,0x20) 
-		}
-		memcpy(ptr+offset,ptr2,bytes(temp).length);
-		offset += bytes(temp).length;
-		return offset;
-	}
-
+	
 	function searchPdf( string[] calldata _requirements, bool _notExpired) internal view returns(bytes32){
 		string memory reqStr = string.concat(_requirements[0],_requirements[1],_requirements[2]);
 		string memory completionDate = _requirements[3];
@@ -354,6 +425,9 @@ contract pdfStorageAndRetrieval {
 			}
 		}
 	}
+    //==============================================================================
+    // PRIVATE FUNCTIONS
+    //==============================================================================
 
 	/**
     * a function to check if the str1 is equal to str2;
@@ -398,6 +472,21 @@ contract pdfStorageAndRetrieval {
 			}
 		}
 		return false;
+	}
+	function uploadDateCmp(bytes32 _metaHash1, bytes32 _metaHash2) internal view returns(bool){
+		string memory date1 = certificationList[_metaHash1].metadata.uploadDate;
+		string memory date2 = certificationList[_metaHash2].metadata.uploadDate;
+		return dateCompare(date1,date2);
+	}
+	function expireDateCmp(bytes32 _metaHash1, bytes32 _metaHash2) internal view returns(bool){
+		string memory date1 = certificationList[_metaHash1].metadata.expirationDate;
+		string memory date2 = certificationList[_metaHash2].metadata.expirationDate;
+		return dateCompare(date1,date2);
+	}
+	function completeDateCmp(bytes32 _metaHash1, bytes32 _metaHash2) internal view returns(bool){
+		string memory date1 = certificationList[_metaHash1].metadata.completionDate;
+		string memory date2 = certificationList[_metaHash2].metadata.completionDate;
+		return dateCompare(date1,date2);
 	}
 
     //==============================================================================
